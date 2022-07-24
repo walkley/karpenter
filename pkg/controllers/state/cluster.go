@@ -292,6 +292,7 @@ func (c *Cluster) deleteNode(nodeName string) {
 
 // updateNode is called for every node reconciliation
 func (c *Cluster) updateNode(ctx context.Context, node *v1.Node) error {
+	time.Sleep(1 * time.Second)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	n, err := c.newNode(ctx, node)
