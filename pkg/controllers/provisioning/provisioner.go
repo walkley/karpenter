@@ -178,6 +178,8 @@ func (p *Provisioner) getPods(ctx context.Context) ([]*v1.Pod, error) {
 func (p *Provisioner) schedule(ctx context.Context, pods []*v1.Pod) ([]*scheduler.Node, error) {
 	defer metrics.Measure(schedulingDuration.WithLabelValues(injection.GetNamespacedName(ctx).Name))()
 
+	logging.FromContext(ctx).Debugf("Begin scheduling")
+
 	// Build node templates
 	var nodeTemplates []*scheduling.NodeTemplate
 	var provisionerList v1alpha5.ProvisionerList

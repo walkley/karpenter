@@ -77,6 +77,9 @@ func NewScheduler(ctx context.Context, kubeClient client.Client, nodeTemplates [
 		}
 	}
 
+	time.Sleep(10 * time.Second)
+	logging.FromContext(ctx).Debugf("Creating in-flight nodes")
+
 	// create our in-flight nodes
 	s.cluster.ForEachNode(func(node *state.Node) bool {
 		name, ok := node.Node.Labels[v1alpha5.ProvisionerNameLabelKey]

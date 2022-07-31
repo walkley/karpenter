@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"knative.dev/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/aws/karpenter/pkg/apis/provisioning/v1alpha5"
@@ -432,6 +433,7 @@ func (c *Cluster) updateNodeUsageFromPod(ctx context.Context, pod *v1.Pod) error
 	n.podRequests[podKey] = podRequests
 	n.podLimits[podKey] = podLimits
 	c.bindings[podKey] = n.Node.Name
+	logging.FromContext(ctx).Debugf("Bind to node: %s", n.Node.Name)
 	return nil
 }
 
