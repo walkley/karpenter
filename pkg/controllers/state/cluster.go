@@ -107,6 +107,15 @@ type Node struct {
 	PodTotalLimits v1.ResourceList
 }
 
+// GetBoundPods returns the pods bound to this node
+func (n *Node) GetBoundPods() sets.String {
+	boundPods := sets.NewString()
+	for pod := range n.podRequests {
+		boundPods.Insert(pod.String())
+	}
+	return boundPods
+}
+
 // ForPodsWithAntiAffinity calls the supplied function once for each pod with required anti affinity terms that is
 // currently bound to a node. The pod returned may not be up-to-date with respect to status, however since the
 // anti-affinity terms can't be modified, they will be correct.

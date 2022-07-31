@@ -23,6 +23,7 @@ import (
 	"github.com/samber/lo"
 	"go.uber.org/multierr"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"knative.dev/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -77,6 +78,8 @@ func NewScheduler(ctx context.Context, kubeClient client.Client, nodeTemplates [
 		}
 	}
 
+	s.boundPods = sets.NewString()
+
 	// create our in-flight nodes
 	s.cluster.ForEachNode(func(node *state.Node) bool {
 		name, ok := node.Node.Labels[v1alpha5.ProvisionerNameLabelKey]
@@ -90,6 +93,7 @@ func NewScheduler(ctx context.Context, kubeClient client.Client, nodeTemplates [
 			return true
 		}
 		s.inflight = append(s.inflight, NewInFlightNode(node, s.topology, nodeTemplate.StartupTaints, s.daemonOverhead[nodeTemplate]))
+		s.recordBoundPods(node)
 
 		// We don't use the status field and instead recompute the remaining resources to ensure we have a consistent view
 		// of the cluster during scheduling.  Depending on how node creation falls out, this will also work for cases where
@@ -108,6 +112,7 @@ type Scheduler struct {
 	remainingResources map[string]v1.ResourceList // provisioner name -> remaining resources for that provisioner
 	instanceTypes      map[string][]cloudprovider.InstanceType
 	daemonOverhead     map[*scheduling.NodeTemplate]v1.ResourceList
+	boundPods          sets.String
 	preferences        *Preferences
 	topology           *Topology
 	cluster            *state.Cluster
@@ -115,7 +120,16 @@ type Scheduler struct {
 	kubeClient         client.Client
 }
 
+func (s *Scheduler) recordBoundPods(node *state.Node) {
+	for pod := range node.GetBoundPods() {
+		s.boundPods.Insert(pod)
+	}
+}
+
 func (s *Scheduler) Solve(ctx context.Context, pods []*v1.Pod) ([]*Node, error) {
+	// Exclude those pods which has bound to node before creating this scheduler
+	pods = s.excludeBoundPods(ctx, pods)
+
 	// We loop trying to schedule unschedulable pods as long as we are making progress.  This solves a few
 	// issues including pods with affinity to another pod in the batch. We could topo-sort to solve this, but it wouldn't
 	// solve the problem of scheduling pods where a particular order is needed to prevent a max-skew violation. E.g. if we
@@ -150,6 +164,19 @@ func (s *Scheduler) Solve(ctx context.Context, pods []*v1.Pod) ([]*Node, error) 
 	}
 	s.recordSchedulingResults(ctx, pods, q.List(), errors)
 	return s.nodes, nil
+}
+
+func (s *Scheduler) excludeBoundPods(ctx context.Context, pods []*v1.Pod) []*v1.Pod {
+	var schedulablePods []*v1.Pod
+	for _, pod := range pods {
+		podName := client.ObjectKeyFromObject(pod).String()
+		if !s.boundPods.Has(podName) {
+			schedulablePods = append(schedulablePods, pod)
+		} else {
+			logging.FromContext(ctx).With("pod", podName).Debugf("excluding pod which has bound to node")
+		}
+	}
+	return schedulablePods
 }
 
 func (s *Scheduler) recordSchedulingResults(ctx context.Context, pods []*v1.Pod, failedToSchedule []*v1.Pod, errors map[*v1.Pod]error) {
